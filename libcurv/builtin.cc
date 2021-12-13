@@ -100,13 +100,35 @@ struct Monoid_Func final : public Function
 // Builtin Functions //
 //-------------------//
 
+struct As_Function : public Curried_Function
+{
+    As_Function(const char* nm) : Curried_Function(2,nm) {}
+    virtual Value ccall(const Function& self, Fail fl, Frame& args)
+    const override {
+        auto type = value_to_type(args[0], Fail::hard, At_Arg(*this, args));
+        if (type->contains(args[1]))
+            return args[1];
+        if (fl == Fail::soft)
+            return missing;
+        throw Exception(At_Arg(self, args),
+            stringify(args[1]," is not a ",*type));
+    }
+    virtual bool validate_arg(unsigned i, Value a, Fail fl, const Context& cx)
+    const override {
+        return value_to_type(a, fl, cx) != nullptr;
+    }
+};
 struct Is_Function : public Curried_Function
 {
-    Is_Function(const char* nm) : Curried_Function(2,nm,call) {}
-    static Value call(const Function& fn, Fail, Frame& args)
-    {
-        auto type = args[0].to<Type>(At_Arg(fn, args));
+    Is_Function(const char* nm) : Curried_Function(2,nm) {}
+    virtual Value ccall(const Function& self, Fail, Frame& args)
+    const override {
+        auto type = value_to_type(args[0], Fail::hard, At_Arg(*this, args));
         return type->contains(args[1]);
+    }
+    virtual bool validate_arg(unsigned i, Value a, Fail fl, const Context& cx)
+    const override {
+        return value_to_type(a, fl, cx) != nullptr;
     }
 };
 struct Is_Bool_Function : public Function
@@ -1065,11 +1087,11 @@ struct TPath_Function : public Function
 };
 struct Amend_Function : public Curried_Function
 {
-    static Value call(const Function& fn, Fail, Frame& args)
+    Amend_Function(const char* nm) : Curried_Function(3,nm) {}
+    virtual Value ccall(const Function& self, Fail, Frame& args) const
     {
-        return tree_amend(args[2], args[0], args[1], At_Arg(fn, args));
+        return tree_amend(args[2], args[0], args[1], At_Arg(*this, args));
     }
-    Amend_Function(const char* nm) : Curried_Function(3,nm,call) {}
 };
 
 // The filename argument to "file", if it is a relative filename,
@@ -1538,10 +1560,13 @@ builtin_namespace()
     {make_symbol("inf"), make<Builtin_Value>(INFINITY)},
     {make_symbol("false"), make<Builtin_Value>(Value(false))},
     {make_symbol("true"), make<Builtin_Value>(Value(true))},
+    {make_symbol("Bool"), make<Builtin_Value>(Value(make<Bool_Type>()))},
+    {make_symbol("Char"), make<Builtin_Value>(Value(make<Char_Type>()))},
     {make_symbol("Num"), make<Builtin_Value>(Value(make<Num_Type>()))},
     {make_symbol("time"), make<Builtin_Time>()},
     {make_symbol("resolution"), make<Builtin_Resolution>()},
 
+    FUNCTION("as", As_Function),
     FUNCTION("is", Is_Function),
     FUNCTION("is_bool", Is_Bool_Function),
     FUNCTION("is_char", Is_Char_Function),

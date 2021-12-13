@@ -73,14 +73,16 @@ struct Function : public Ref_Value
     static const char name[];
 };
 
-// Returns nullptr if argument is not a function.
+// Convert a value to a function,
+// returning nullptr if the argument is not a function.
 // If the Value is a record with a `call` field, then we convert the value
 // of the `call` field to a function by recursively calling `maybe_function`.
 // May throw an exception if fetching the `call` field fails (currently
 // only happens for directory records).
 Shared<const Function> maybe_function(Value, const Context&);
 
-// If Value is not a Function, fail.
+// Convert a value to a function,
+// failing if the argument is not a function.
 Shared<const Function> value_to_function(Value, Fail, const Context&);
 
 inline Shared<const Function> value_to_function(Value val, const Context& cx)
@@ -129,42 +131,43 @@ struct Tuple_Function : public Function
     virtual SC_Value sc_tuple_call(SC_Frame&) const;
 };
 
+// This is a convenience for defining builtin curried functions.
+struct Curried_Function : public Function
+{
+    unsigned nargs() const { return nslots_; }
+
+    Curried_Function(unsigned nargs, const char* name)
+    :
+        Function(nargs, name)
+    {
+        assert(nargs >= 2);
+    }
+
+    virtual Value call(Value, Fail, Frame&) const override;
+
+    // call the function, with arguments stored in the frame.
+    virtual Value ccall(const Function&, Fail, Frame& args) const = 0;
+    virtual bool validate_arg(unsigned, Value, Fail, const Context&) const;
+};
+
 // A Partial_Application is the result of calling a Curried_Function.
 struct Partial_Application_Base : public Function
 {
     unsigned nargs() const { return nslots_; }
 
     Partial_Application_Base(unsigned nargs, Symbol_Ref name,
-        Value (*func)(const Function&, Fail, Frame&))
+        Shared<const Curried_Function> cfunc)
     :
         Function(nargs, name),
-        callfunc_(func)
+        cfunc_(cfunc)
     {}
 
     virtual Value call(Value, Fail, Frame&) const override;
 
-    Value (*callfunc_)(const Function&, Fail, Frame&);
+    Shared<const Curried_Function> cfunc_;
     TAIL_ARRAY_MEMBERS(Value)
 };
 using Partial_Application = Tail_Array<Partial_Application_Base>;
-
-// This is a convenience for defining builtin curried functions.
-struct Curried_Function : public Function
-{
-    unsigned nargs() const { return nslots_; }
-    Value (*callfunc_)(const Function&, Fail, Frame&);
-
-    Curried_Function(unsigned nargs, const char* name,
-        Value (*func)(const Function&, Fail, Frame&))
-    :
-        Function(nargs, name),
-        callfunc_(func)
-    {
-        assert(nargs >= 2);
-    }
-
-    virtual Value call(Value, Fail, Frame&) const override;
-};
 
 /// The run-time representation of a compiled lambda expression.
 ///

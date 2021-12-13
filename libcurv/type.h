@@ -55,6 +55,15 @@ struct Type : public Ref_Value
     static const char name[];
 };
 
+Shared<const Type> value_to_type(Value, Fail, const Context&);
+
+inline std::ostream&
+operator<<(std::ostream& out, const Type& type)
+{
+    type.print_repr(out);
+    return out;
+}
+
 struct Error_Type : public Type
 {
     Error_Type() : Type(sty_error_type, Plex_Type::missing) {}
@@ -87,6 +96,13 @@ struct List_Type : public Type
         elem_type_(et)
     {}
     static Plex_Type make_plex_type(unsigned, Shared<const Type>);
+    virtual bool contains(Value) const;
+    virtual void print_repr(std::ostream&) const override;
+};
+
+struct Char_Type : public Type
+{
+    Char_Type() : Type(sty_char_type, Plex_Type::missing) {}
     virtual bool contains(Value) const;
     virtual void print_repr(std::ostream&) const override;
 };
